@@ -2,13 +2,11 @@ package com.jzo2o.foundations.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.ObjectUtil;
-import cn.hutool.core.util.PageUtil;
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.jzo2o.common.expcetions.CommonException;
 import com.jzo2o.common.expcetions.ForbiddenOperationException;
 import com.jzo2o.common.model.PageResult;
+import com.jzo2o.foundations.enums.FoundationHotStatusEnum;
 import com.jzo2o.foundations.enums.FoundationStatusEnum;
 import com.jzo2o.foundations.mapper.RegionMapper;
 import com.jzo2o.foundations.mapper.ServeItemMapper;
@@ -16,13 +14,10 @@ import com.jzo2o.foundations.mapper.ServeMapper;
 import com.jzo2o.foundations.model.domain.Region;
 import com.jzo2o.foundations.model.domain.Serve;
 import com.jzo2o.foundations.model.domain.ServeItem;
-import com.jzo2o.foundations.model.domain.ServeType;
 import com.jzo2o.foundations.model.dto.request.ServePageQueryReqDTO;
 
-import com.jzo2o.foundations.model.dto.request.ServeTypePageQueryReqDTO;
 import com.jzo2o.foundations.model.dto.request.ServeUpsertReqDTO;
 import com.jzo2o.foundations.model.dto.response.ServeResDTO;
-import com.jzo2o.foundations.model.dto.response.ServeTypeResDTO;
 import com.jzo2o.foundations.service.IServeService;
 
 import com.jzo2o.mysql.utils.PageHelperUtils;
@@ -32,7 +27,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.temporal.ValueRange;
 import java.util.List;
 
 @Service
@@ -122,11 +116,99 @@ public class ServeServiceImpl extends ServiceImpl<ServeMapper, Serve> implements
       }
         //更新上架状态
         boolean update = lambdaUpdate().eq(Serve::getId, id)
-                .set(Serve::getSaleStatus, FoundationStatusEnum.DISABLE.getStatus()).update();
+                .set(Serve::getSaleStatus, FoundationStatusEnum.ENABLE.getStatus()).update();
 
       if (!update){
           throw new CommonException("启动服务失败");
       }
       return baseMapper.selectById(id);
     }
+
+    @Override
+    @Transactional
+    public Serve delete(Long id) {
+        Serve serve = baseMapper.selectById(id);
+        if (ObjectUtil.isNull(serve)) {
+            throw  new ForbiddenOperationException("区域服务不存在");
+        }
+
+        //判断区域服务当前状态 是否 为草稿
+        if (!(serve.getSaleStatus() ==FoundationStatusEnum.INIT.getStatus())){
+            throw new ForbiddenOperationException("当前的状态不是草稿 不能删除");
+        }
+
+        boolean remove = lambdaUpdate().eq(Serve::getId, id).remove();
+        if (!remove){
+            throw  new ForbiddenOperationException("删除失败");
+        }
+
+        return baseMapper.selectById(id);
+    }
+
+    @Override
+    public Serve discontinue(Long id) {
+        Serve serve = baseMapper.selectById(id);
+        if (ObjectUtil.isNull(serve)) {
+            throw new ForbiddenOperationException("区域服务不存在");
+        }
+        //上架状态
+        Integer saleStatus = serve.getSaleStatus();
+        //服务区域为状态未上架才能下架
+        if(saleStatus == FoundationStatusEnum.ENABLE.getStatus()){
+            throw  new ForbiddenOperationException("草稿或下架状态方可上架");
+        }
+
+        //更新下架状态
+        boolean update = lambdaUpdate().eq(Serve::getId, id)
+                .set(Serve::getSaleStatus, FoundationStatusEnum.DISABLE.getStatus()).update();
+
+        if (!update){
+            throw new CommonException("启动服务失败");
+        }
+        return baseMapper.selectById(id);
+    }
+
+    @Override
+    public Serve OnHot(Long id) {
+        Serve serve = baseMapper.selectById(id);
+        if (ObjectUtil.isNull(serve)) {
+            throw  new ForbiddenOperationException("区域服务不存在");
+        }
+        //当前服务为非热门 才能设置成热门
+        Integer hotstate = serve.getIsHot();
+        if (!(hotstate == FoundationHotStatusEnum.NOTHOT.getStatus())){
+            throw  new ForbiddenOperationException("设置失败");
+        }
+
+        boolean update = lambdaUpdate().eq(Serve::getId, id)
+                .set(Serve::getIsHot,FoundationHotStatusEnum.ISHOT.getStatus()).update();
+
+        if (!update){
+            throw new CommonException("设置失败");
+        }
+        return baseMapper.selectById(id);
+    }
+
+    @Override
+    public Serve offHot(Long id) {
+        Serve serve = baseMapper.selectById(id);
+        if (ObjectUtil.isNull(serve)) {
+            throw  new ForbiddenOperationException("区域服务不存在");
+        }
+        //当前服务为非热门 才能设置成热门
+        Integer hotstate = serve.getIsHot();
+        if (!(hotstate == FoundationHotStatusEnum.ISHOT.getStatus())){
+            throw  new ForbiddenOperationException("设置失败");
+        }
+
+        boolean update = lambdaUpdate().eq(Serve::getId, id)
+                .set(Serve::getIsHot,FoundationHotStatusEnum.NOTHOT.getStatus()).update();
+
+        if (!update){
+            throw new CommonException("设置失败");
+        }
+        return baseMapper.selectById(id);
+    }
+
+
 }
